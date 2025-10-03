@@ -1,6 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Zhengqbbb/cz-git/refs/tags/v1.12
-  .0/docs/public/schema/cz-git.json",
+  "$schema": "https://unpkg.com/cz-git@1.9.3/schema/cz-git.json",
   "path": "cz-git",
   "useEmoji": true,
   "scopes": [

@@ -1,3 +1,11 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
-exec < /dev/tty && npx cz --hook
+
+COMMIT_MSG_FILE=$1
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+
+# Si la rama tiene formato feature/JIRA-123-nombre
+if echo "$BRANCH_NAME" | grep -Eo '(JIRA|PROJ)-[0-9]+' >/dev/null; then
+  TICKET=$(echo "$BRANCH_NAME" | grep -Eo '(JIRA|PROJ)-[0-9]+')
+  sed -i.bak "1s|^|[$TICKET] |" "$COMMIT_MSG_FILE"
+fi
