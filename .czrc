@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Zhengqbbb/cz-git/refs/tags/v1.12
+  .0/docs/public/schema/cz-git.json",
+  "path": "cz-git",
+  "useEmoji": true,
+  "scopes": [
+    "lib",
+    "shell",
+    "mfe",
+    "docs",
+    "ci",
+    "build",
+    "release"
+  ],
+  "enableMultipleScopes": true,
+  "allowCustomScopes": true,
+  "messages": {
+    "type": "Selecciona el tipo de cambio que estás comiteando:",
+    "scope": "Selecciona el alcance del cambio (opcional):",
+    "subject": "Escribe una breve descripción:\n",
+    "body": "Provee una descripción más larga (opcional):\n",
+    "breaking": "Lista cambios BREAKING (opcional):\n",
+    "footer": "Issues que cierra (e.g., #123), separa por coma (opcional):\n"
+  }
+}

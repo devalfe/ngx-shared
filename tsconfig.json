@@ -8,7 +8,8 @@
     "noPropertyAccessFromIndexSignature": true,
     "noImplicitReturns": true,
     "paths": {
-      "ngx-global-state": [
+      "@devalfe/ngx-global-state": [
+        "./projects/ngx-global-state/src/public-api",
         "./dist/ngx-global-state"
       ]
     },

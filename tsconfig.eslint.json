@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": [
+    "projects/mf-shared/src/**/*.ts",
+    "projects/**/*/*.ts",
+    "apps/**/*/*.ts",
+    "tools/**/*/*.ts",
+    "*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

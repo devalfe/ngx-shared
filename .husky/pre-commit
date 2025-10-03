@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running lint-staged..."
+npx lint-staged || exit 1
+
+# Opcional: correr pruebas cortas tras formateo/lint
+echo "🧪 Running unit tests on changed files..."
+npm run test:staged || exit 1

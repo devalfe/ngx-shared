@@ -1,12 +1,26 @@
 {
-  "name": "ngx-global-state",
-  "version": "0.0.1",
+  "name": "@devalfe/ngx-global-state",
+  "version": "1.0.1",
+  "description": "Global distributed store + inter-app message bus for Angular micro-frontends",
+  "keywords": [
+    "angular",
+    "micro-frontend",
+    "store",
+    "message-bus",
+    "rxjs",
+    "broadcastchannel"
+  ],
   "peerDependencies": {
-    "@angular/common": "^20.3.0",
-    "@angular/core": "^20.3.0"
+    "@angular/common": "^18.0.0 || ^19.0.0 || ^20.3.0",
+    "@angular/core": "^18.0.0 || ^19.0.0 || ^20.3.0",
+    "rxjs": "^7.8.0 || ^8.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com/"
   },
   "sideEffects": false
 }
