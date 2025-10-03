@@ -9,10 +9,15 @@ pr:
     include: [main, develop]
 
 variables:
-  NODE_VERSION: '22.x'
-  LIB_DIR: 'projects/ngx-global-state'
-  DIST_DIR: 'dist/ngx-global-state'
-  DOCS_DIR: 'docs'
+  - group: v-group-global
+  - name: NODE_VERSION
+    value: '22.x'
+  - name: LIB_DIR
+    value: 'projects/ngx-global-state'
+  - name: DIST_DIR
+    value: 'dist/ngx-global-state'
+  - name: DOCS_DIR
+    value: 'docs'
 
 stages:
   # ──────────────────────────────────────────────────────────────────────────────
