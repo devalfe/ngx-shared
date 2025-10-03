@@ -13,6 +13,7 @@ class MockBroadcastChannel {
     this.peers = set;
   }
   postMessage(data: any) {
+    // @ts-ignore
     for (const ch of this.peers) {
       if (ch !== this && ch.onmessage) {
         ch.onmessage({ data } as any);
