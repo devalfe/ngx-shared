@@ -1,0 +1,147 @@
+# Azure DevOps Pipeline — Validate + Release (semantic-release to npm.pkg.github.com) + DocsDeploy
+
+trigger:
+  branches:
+    include: [main, develop]
+
+pr:
+  branches:
+    include: [main, develop]
+
+variables:
+  NODE_VERSION: '22.x'
+  LIB_DIR: 'projects/ngx-global-state'
+  DIST_DIR: 'dist/ngx-global-state'
+  DOCS_DIR: 'docs'
+
+stages:
+  # ──────────────────────────────────────────────────────────────────────────────
+  # 1) VALIDATE — instala, lint/format (si existen scripts), tests, docs, build lib
+  # ──────────────────────────────────────────────────────────────────────────────
+  - stage: Validate
+    displayName: 'Validate (build + test + docs)'
+    jobs:
+      - job: validate
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            displayName: 'Use Node $(NODE_VERSION)'
+            inputs:
+              versionSpec: '$(NODE_VERSION)'
+
+          - script: |
+              corepack enable || true
+              node -v
+              npm -v
+            displayName: 'Node info'
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: '$(Pipeline.Workspace)/.npm'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+            displayName: 'Cache npm'
+
+          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+            displayName: 'npm ci'
+
+          - script: |
+              if npm run | grep -q "lint"; then npm run lint; else echo "No lint script"; fi
+              if npm run | grep -q "format:check"; then npm run format:check; else echo "No format:check script"; fi
+            displayName: 'ESLint / Prettier (opcionales)'
+
+          - script: |
+              if npm run | grep -q "test:ci"; then npm run test:ci; else echo "No tests"; fi
+            displayName: 'Unit tests'
+
+          - script: |
+              if npm run | grep -q "docs"; then npm run docs; else echo "No docs"; fi
+            displayName: 'Generate docs (Compodoc)'
+
+          - publish: $(DOCS_DIR)
+            artifact: docs
+            condition: succeededOrFailed()
+            displayName: 'Publish docs artifact'
+
+          - script: npm run build:lib
+            displayName: 'Build library'
+
+          - publish: $(DIST_DIR)
+            artifact: ngx-global-state-dist
+            displayName: 'Publish dist artifact'
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # 2) RELEASE — semantic-release en main (publica a npm.pkg.github.com)
+  # ──────────────────────────────────────────────────────────────────────────────
+  - stage: Release
+    displayName: 'Semantic Release (main only → GitHub Packages)'
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: semantic_release
+        displayName: 'semantic-release'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            persistCredentials: true
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            displayName: 'Use Node $(NODE_VERSION)'
+            inputs:
+              versionSpec: '$(NODE_VERSION)'
+
+          # Escribe ~/.npmrc para GitHub Packages usando el PAT almacenado en GITHUB_TOKEN
+          - script: |
+              echo "@devalfe:registry=https://npm.pkg.github.com" > ~/.npmrc
+              echo "//npm.pkg.github.com/:_authToken=$(GITHUB_TOKEN)" >> ~/.npmrc
+              echo "always-auth=true" >> ~/.npmrc
+              echo "npmrc configured for GitHub Packages"
+            displayName: 'Configure npmrc for GitHub Packages'
+
+          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+            displayName: 'npm ci'
+
+          - script: npm run build:lib
+            displayName: 'Build library (for semantic-release)'
+
+          # Ejecuta semantic-release y fuerza repositoryUrl desde la variable del pipeline
+          - script: npx semantic-release --repositoryUrl "$(Build.Repository.Uri)"
+            displayName: 'Run semantic-release (publish to npm.pkg.github.com)'
+            env:
+              # PAT con scopes read/write packages
+              NPM_TOKEN: $(GITHUB_TOKEN) # lo usa @semantic-release/npm
+              GITHUB_TOKEN: $(System.AccessToken) # para @semantic-release/git (commit+tag)
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # 3) DOCS DEPLOY — Despliega Compodoc a Azure Static Web Apps
+  # ──────────────────────────────────────────────────────────────────────────────
+  - stage: DocsDeploy
+    displayName: 'Deploy Docs to Azure Static Web Apps'
+    dependsOn: Validate
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: deploy_docs
+        displayName: 'Deploy docs (Compodoc)'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - download: current
+            artifact: docs
+
+          - task: AzureStaticWebApp@0
+            displayName: 'Deploy to Azure Static Web Apps'
+            inputs:
+              app_location: '$(Pipeline.Workspace)/docs' # carpeta con HTML de Compodoc
+              output_location: '.'
+            env:
+              azure_static_web_apps_api_token: $(SWA_DEPLOYMENT_TOKEN)

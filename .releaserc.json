@@ -6,6 +6,7 @@
       "prerelease": true
     }
   ],
+  "repositoryUrl": "https://github.com/devalfe/ngx-global-state.git",
   "plugins": [
     [
       "@semantic-release/commit-analyzer",
