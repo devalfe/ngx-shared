@@ -3,12 +3,10 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../out-tsc/spec",
-    "types": [
-      "jasmine"
-    ]
+    "types": ["jest", "node"],
+    "esModuleInterop": true,
+    "emitDecoratorMetadata": false,
+    "experimentalDecorators": true
   },
-  "include": [
-    "src/**/*.ts"
-  ]
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }
