@@ -52,38 +52,8 @@ stages:
                 npm | "$(Agent.OS)"
             displayName: 'Cache npm'
 
-          - script: |
-              set -euxo pipefail
-
-              echo "🔧 Limpieza de npm config heredada"
-              # Muestra de dónde podría venir la config
-              echo "userconfig: $(npm config get userconfig)"; echo "globalconfig: $(npm config get globalconfig)"
-              [ -f .npmrc ] && echo "Repo .npmrc:" && cat .npmrc || true
-              [ -f ~/.npmrc ] && echo "HOME .npmrc:" && sed 's/_authToken=.*/_authToken=***hidden***/' ~/.npmrc || true
-              env | grep -i npm_config || true
-
-              # Elimina archivos de configuración heredados
-              rm -f .npmrc ~/.npmrc
-
-              # Desactiva cualquier override por env vars
-              unset NPM_CONFIG_REGISTRY npm_config_registry NPM_CONFIG_USERCONFIG npm_config_userconfig
-              unset NPM_CONFIG_PROXY npm_config_proxy NPM_CONFIG_HTTPS_PROXY npm_config_https_proxy
-              unset NPM_CONFIG__AUTH npm_config__auth NPM_CONFIG__AUTHTOKEN npm_config__authtoken
-
-              # Crea un userconfig minimal y úsalo explícitamente
-              cat > .ci-npmrc <<'EOF'
-                registry=https://registry.npmjs.org/
-                strict-ssl=true
-                fund=false
-                audit=false
-              EOF
-
-              echo "✅ Usando userconfig local:"
-              cat .ci-npmrc
-            displayName: 'Sanitize npm config (remove Verdaccio)'
-
-          - script: npm ci --userconfig=.ci-npmrc --prefer-offline
-            displayName: 'npm ci (npmjs)'
+          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+            displayName: 'npm ci'
 
           - script: |
               if npm run | grep -q "lint"; then npm run lint; else echo "No lint script"; fi
