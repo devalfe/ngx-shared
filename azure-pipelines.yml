@@ -52,7 +52,7 @@ stages:
                 npm | "$(Agent.OS)"
             displayName: 'Cache npm'
 
-          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+          - script: HUSKY=0 npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
             displayName: 'npm ci'
 
           - script: |
@@ -117,7 +117,9 @@ stages:
             displayName: 'Build library (for semantic-release)'
 
           # Ejecuta semantic-release y fuerza repositoryUrl desde la variable del pipeline
-          - script: npx semantic-release --repositoryUrl "$(Build.Repository.Uri)"
+          - script: |
+              export HUSKY=0
+              npx semantic-release --repositoryUrl "$(Build.Repository.Uri)"
             displayName: 'Run semantic-release (publish to npm.pkg.github.com)'
             env:
               # PAT con scopes read/write packages
