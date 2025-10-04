@@ -52,7 +52,21 @@ stages:
                 npm | "$(Agent.OS)"
             displayName: 'Cache npm'
 
-          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+          - script: |
+              echo "Reset npm registries to npmjs"
+              rm -f ~/.npmrc
+              if [ -f .npmrc ]; then
+                echo "Repo .npmrc detectado -> mostrando:"
+                cat .npmrc || true
+              fi
+              npm config set registry https://registry.npmjs.org/
+              npm config delete proxy || true
+              npm config delete https-proxy || true
+              echo "Effective registry: $(npm config get registry)"
+              npm config list -l | sed 's/_authToken=.*/_authToken=***hidden***/'
+            displayName: 'Force npm registry to npm'
+
+          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline --registry=https://registry.npmjs.org/
             displayName: 'npm ci'
 
           - script: |
