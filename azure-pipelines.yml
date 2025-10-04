@@ -57,16 +57,19 @@ stages:
               rm -f ~/.npmrc
               if [ -f .npmrc ]; then
                 echo "Repo .npmrc detectado -> mostrando:"
-                cat .npmrc || true
+                cat .npmrc
               fi
               npm config set registry https://registry.npmjs.org/
               npm config delete proxy || true
               npm config delete https-proxy || true
               echo "Effective registry: $(npm config get registry)"
               npm config list -l | sed 's/_authToken=.*/_authToken=***hidden***/'
-            displayName: 'Force npm registry to npm'
+            displayName: 'Force npm registry to npmjs'
 
-          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline --registry=https://registry.npmjs.org/
+          - task: NodeTool@0
+            inputs: { versionSpec: '22.x' }
+
+          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
             displayName: 'npm ci'
 
           - script: |
