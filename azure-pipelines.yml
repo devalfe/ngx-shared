@@ -142,26 +142,32 @@ stages:
           - checkout: self
             fetchDepth: 1
 
-          # Descarga el artefacto "docs" generado en Validate a una ruta conocida
+          # 1) Descarga el artefacto 'docs' a _site (dentro del repo)
           - task: DownloadPipelineArtifact@2
             displayName: 'Download docs artifact'
             inputs:
               buildType: current
               artifactName: docs
-              targetPath: '$(Build.SourcesDirectory)/_site' # <— carpeta final con index.html
+              targetPath: '$(Build.SourcesDirectory)/_site'
 
-          # (opcional) Verifica que exista contenido
+          # 2) Debug: mostrar que exista index.html
           - script: |
-              echo "Listing $(Build.SourcesDirectory)/_site"
+              echo "Sources: $(Build.SourcesDirectory)"
+              echo "Workspace: $(Pipeline.Workspace)"
+              echo "Listing _site:"
               ls -la '$(Build.SourcesDirectory)/_site' || true
-            displayName: 'Debug: list downloaded docs'
+              echo "Buscar index.html:"
+              find '$(Build.SourcesDirectory)/_site' -maxdepth 2 -name index.html -print || true
+              # Falla si no hay index.html
+              test -f '$(Build.SourcesDirectory)/_site/index.html' || (echo '❌ _site/index.html no existe' && exit 1)
+            displayName: 'Debug: verify downloaded docs'
 
-          # Despliegue a Azure Static Web Apps (no recompila; ya es estático)
+          # 3) Deploy con RUTA RELATIVA (evita el prefijo /working_dir)
           - task: AzureStaticWebApp@0
             displayName: 'Deploy to Azure Static Web Apps'
             inputs:
-              app_location: '$(Build.SourcesDirectory)/_site' # <— debe contener index.html
-              output_location: '.' # no aplica para contenido estático
-              skip_app_build: true
+              app_location: '_site' # <— RELATIVA, no absoluta
+              output_location: '.' # no se usa para estático puro
+              skip_app_build: true # ya está "build" (Compodoc)
             env:
               azure_static_web_apps_api_token: $(SWA_DEPLOYMENT_TOKEN)
