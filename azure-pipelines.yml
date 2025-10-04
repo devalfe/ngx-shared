@@ -53,24 +53,37 @@ stages:
             displayName: 'Cache npm'
 
           - script: |
-              echo "Reset npm registries to npmjs"
-              rm -f ~/.npmrc
-              if [ -f .npmrc ]; then
-                echo "Repo .npmrc detectado -> mostrando:"
-                cat .npmrc
-              fi
-              npm config set registry https://registry.npmjs.org/
-              npm config delete proxy || true
-              npm config delete https-proxy || true
-              echo "Effective registry: $(npm config get registry)"
-              npm config list -l | sed 's/_authToken=.*/_authToken=***hidden***/'
-            displayName: 'Force npm registry to npmjs'
+              set -euxo pipefail
 
-          - task: NodeTool@0
-            inputs: { versionSpec: '22.x' }
+              echo "🔧 Limpieza de npm config heredada"
+              # Muestra de dónde podría venir la config
+              echo "userconfig: $(npm config get userconfig)"; echo "globalconfig: $(npm config get globalconfig)"
+              [ -f .npmrc ] && echo "Repo .npmrc:" && cat .npmrc || true
+              [ -f ~/.npmrc ] && echo "HOME .npmrc:" && sed 's/_authToken=.*/_authToken=***hidden***/' ~/.npmrc || true
+              env | grep -i npm_config || true
 
-          - script: npm ci --registry=https://registry.npmjs.org/
-            displayName: 'npm ci'
+              # Elimina archivos de configuración heredados
+              rm -f .npmrc ~/.npmrc
+
+              # Desactiva cualquier override por env vars
+              unset NPM_CONFIG_REGISTRY npm_config_registry NPM_CONFIG_USERCONFIG npm_config_userconfig
+              unset NPM_CONFIG_PROXY npm_config_proxy NPM_CONFIG_HTTPS_PROXY npm_config_https_proxy
+              unset NPM_CONFIG__AUTH npm_config__auth NPM_CONFIG__AUTHTOKEN npm_config__authtoken
+
+              # Crea un userconfig minimal y úsalo explícitamente
+              cat > .ci-npmrc <<'EOF'
+              registry=https://registry.npmjs.org/
+              strict-ssl=true
+              fund=false
+              audit=false
+              EOF
+
+              echo "✅ Usando userconfig local:"
+              cat .ci-npmrc
+            displayName: 'Sanitize npm config (remove Verdaccio)'
+
+          - script: npm ci --userconfig=.ci-npmrc --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+            displayName: 'npm ci (npmjs)'
 
           - script: |
               if npm run | grep -q "lint"; then npm run lint; else echo "No lint script"; fi
