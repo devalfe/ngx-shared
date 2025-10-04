@@ -142,13 +142,26 @@ stages:
           - checkout: self
             fetchDepth: 1
 
-          - download: current
-            artifact: docs
+          # Descarga el artefacto "docs" generado en Validate a una ruta conocida
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download docs artifact'
+            inputs:
+              buildType: current
+              artifactName: docs
+              targetPath: '$(Build.SourcesDirectory)/_site' # <— carpeta final con index.html
 
+          # (opcional) Verifica que exista contenido
+          - script: |
+              echo "Listing $(Build.SourcesDirectory)/_site"
+              ls -la '$(Build.SourcesDirectory)/_site' || true
+            displayName: 'Debug: list downloaded docs'
+
+          # Despliegue a Azure Static Web Apps (no recompila; ya es estático)
           - task: AzureStaticWebApp@0
             displayName: 'Deploy to Azure Static Web Apps'
             inputs:
-              app_location: '$(Pipeline.Workspace)/docs' # carpeta con HTML de Compodoc
-              output_location: '.'
+              app_location: '$(Build.SourcesDirectory)/_site' # <— debe contener index.html
+              output_location: '.' # no aplica para contenido estático
+              skip_app_build: true
             env:
               azure_static_web_apps_api_token: $(SWA_DEPLOYMENT_TOKEN)

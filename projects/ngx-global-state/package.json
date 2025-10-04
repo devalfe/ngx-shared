@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/devalfe/ngx-global-state.git"
+    "url": "git+https://github.com/devalfe/ngx-global-state.git"
   },
   "typings": "dist/ngx-global-state/ngx-global-state.d.ts",
   "keywords": [
