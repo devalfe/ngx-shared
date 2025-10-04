@@ -13,7 +13,7 @@ npm install @devalfe/ngx-global-state --save
 ```ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
-import { provideGlobalState, provideMessageBus } from '@devalfe/mf-shared';
+import { provideGlobalState, provideMessageBus } from '@devalfe/ngx-global-state';
 
 bootstrapApplication(AppComponent, {
   providers: [

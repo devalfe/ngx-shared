@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": true },
   "include": [
-    "projects/mf-shared/src/**/*.ts",
+    "projects/ngx-global-state/src/**/*.ts",
     "projects/**/*/*.ts",
     "apps/**/*/*.ts",
     "tools/**/*/*.ts",
