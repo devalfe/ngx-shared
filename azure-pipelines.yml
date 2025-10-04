@@ -69,7 +69,7 @@ stages:
           - task: NodeTool@0
             inputs: { versionSpec: '22.x' }
 
-          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+          - script: npm ci --registry=https://registry.npmjs.org/
             displayName: 'npm ci'
 
           - script: |
