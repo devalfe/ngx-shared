@@ -72,17 +72,17 @@ stages:
 
               # Crea un userconfig minimal y úsalo explícitamente
               cat > .ci-npmrc <<'EOF'
-              registry=https://registry.npmjs.org/
-              strict-ssl=true
-              fund=false
-              audit=false
+                registry=https://registry.npmjs.org/
+                strict-ssl=true
+                fund=false
+                audit=false
               EOF
 
               echo "✅ Usando userconfig local:"
               cat .ci-npmrc
             displayName: 'Sanitize npm config (remove Verdaccio)'
 
-          - script: npm ci --userconfig=.ci-npmrc --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+          - script: npm ci --userconfig=.ci-npmrc --prefer-offline
             displayName: 'npm ci (npmjs)'
 
           - script: |
