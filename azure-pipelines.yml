@@ -143,25 +143,49 @@ stages:
 
                 - script: |
                     set -euxo pipefail
-                    # 1) Autenticación para GitHub Packages
-                    echo "@devalfe:registry=https://npm.pkg.github.com" > ~/.npmrc
+
+                    PKG="@devalfe/ngx-global-state"                             # <-- cambia si aplica
+                    REG="https://npm.pkg.github.com"
+
+                    DIST="$(Pipeline.Workspace)/ngx-dist"                           # <-- tu ruta dist
+                    BASE=$(node -e "console.log((require('./projects/ngx-global-state/package.json').version||'0.0.0').split('-')[0])")
+                    BUILD="$(Build.BuildId)"
+                    ATTEMPT="${System.JobAttempt:-1}"
+
+                    # Genera candidato 1: X.Y.Z-next.BUILD
+                    CANDY="${BASE}-next.${BUILD}"
+
+                    # Función: existe versión?
+                    exists () { npm view "${PKG}@${1}" version --registry="${REG}" > /dev/null 2>&1; }
+
+                    if exists "${CANDY}"; then
+                      # Candidato 2: X.Y.Z-next.BUILD.ATTEMPT
+                      CANDY="${BASE}-next.${BUILD}.${ATTEMPT}"
+                      if exists "${CANDY}"; then
+                        # Candidato 3 (fallback): X.Y.Z-next.BUILD.ATTEMPT.<epoch>
+                        TS=$(date +%s)
+                        CANDY="${BASE}-next.${BUILD}.${ATTEMPT}.${TS}"
+                      fi
+                    fi
+
+                    echo "Canary version → ${CANDY}"
+
+                    # Escribe versión y (opcional) publishConfig.registry en el package.json de dist
+                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version='${CANDY}'; j.publishConfig={...(j.publishConfig||{}), registry:'${REG}'}; fs.writeFileSync(p, JSON.stringify(j,null,2)); console.log('Updated',p)"
+
+                    # Autenticación
+                    echo "@devalfe:registry=${REG}" > ~/.npmrc                   # <-- cambia @devalfe si tu scope difiere
                     echo "//npm.pkg.github.com/:_authToken=$(GITHUB_TOKEN)" >> ~/.npmrc
                     echo "always-auth=true" >> ~/.npmrc
 
-                    # 2) Verifica quién eres en GPR
-                    npm whoami --registry=https://npm.pkg.github.com || { echo "Auth FALLÓ"; exit 1; }
+                    npm whoami --registry="${REG}"
 
-                    # 3) Asegura publishConfig.registry dentro de dist (opcional pero recomendado)
-                    DIST="$(Pipeline.Workspace)/ngx-dist"
-                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.publishConfig={...(j.publishConfig||{}), registry:'https://npm.pkg.github.com'}; fs.writeFileSync(p,JSON.stringify(j,null,2)); console.log('publishConfig.registry set in',p)"
-
-                    # 4) Publica canary con dist-tag next (forces registry by flag también)
+                    # Publica con tag 'next'
                     cd "${DIST}"
-                    npm publish --tag next --access=public --registry=https://npm.pkg.github.com/
-                  displayName: 'Auth + verify + publish canary to GPR'
+                    npm publish --tag next --access=public --registry="${REG}"
+                  displayName: 'Publish canary (unique version) to GitHub Packages'
                   env:
-                    # Usa el token del Variable Group; .npmrc del repo exige este env
-                    NPM_CONFIG__AUTH_TOKEN: '$(GITHUB_TOKEN)'
+                    GITHUB_TOKEN: $(GITHUB_TOKEN)
 
   # ──────────────────────────────────────────────────────────────────────────────
   # 4) RELEASE — tras aprobación de `prod` (y solo en main), semantic-release
