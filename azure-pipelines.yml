@@ -143,18 +143,24 @@ stages:
 
                 - script: |
                     set -euxo pipefail
+                    # 1) Autenticación para GitHub Packages
+                    echo "@devalfe:registry=https://npm.pkg.github.com" > ~/.npmrc
+                    echo "//npm.pkg.github.com/:_authToken=$(GITHUB_TOKEN)" >> ~/.npmrc
+                    echo "always-auth=true" >> ~/.npmrc
+
+                    # 2) Verifica quién eres en GPR
+                    npm whoami --registry=https://npm.pkg.github.com || { echo "Auth FALLÓ"; exit 1; }
+
+                    # 3) Asegura publishConfig.registry dentro de dist (opcional pero recomendado)
                     DIST="$(Pipeline.Workspace)/ngx-dist"
-                    BASE=$(node -e "console.log((require('./$(LIB_DIR)/package.json').version||'0.0.0').split('-')[0])")
-                    CANARY="${BASE}-next.$(Build.BuildId)"
-                    echo "Base: $BASE -> Canary: $CANARY"
-                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version='${CANARY}'; fs.writeFileSync(p, JSON.stringify(j, null, 2)); console.log('Updated',p)"
+                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.publishConfig={...(j.publishConfig||{}), registry:'https://npm.pkg.github.com'}; fs.writeFileSync(p,JSON.stringify(j,null,2)); console.log('publishConfig.registry set in',p)"
+
+                    # 4) Publica canary con dist-tag next (forces registry by flag también)
                     cd "${DIST}"
-                    npm publish --tag next --access=public
-                  displayName: 'Publish canary (next) to GitHub Packages'
+                    npm publish --tag next --access=public --registry=https://npm.pkg.github.com/
+                  displayName: 'Auth + verify + publish canary to GPR'
                   env:
                     # Usa el token del Variable Group; .npmrc del repo exige este env
-                    NPM_CONFIG_REGISTRY: 'https://npm.pkg.github.com/'
-                    NPM_CONFIG_ALWAYS_AUTH: 'true'
                     NPM_CONFIG__AUTH_TOKEN: '$(GITHUB_TOKEN)'
 
   # ──────────────────────────────────────────────────────────────────────────────
