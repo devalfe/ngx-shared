@@ -153,7 +153,9 @@ stages:
                   displayName: 'Publish canary (next) to GitHub Packages'
                   env:
                     # Usa el token del Variable Group; .npmrc del repo exige este env
-                    GITHUB_TOKEN: $(GITHUB_TOKEN)
+                    NPM_CONFIG_REGISTRY: 'https://npm.pkg.github.com/'
+                    NPM_CONFIG_ALWAYS_AUTH: 'true'
+                    NPM_CONFIG__AUTH_TOKEN: '$(GITHUB_TOKEN)'
 
   # ──────────────────────────────────────────────────────────────────────────────
   # 4) RELEASE — tras aprobación de `prod` (y solo en main), semantic-release
