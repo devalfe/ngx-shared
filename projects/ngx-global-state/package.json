@@ -4,11 +4,18 @@
   "description": "Global distributed store + inter-app message bus for Angular micro-frontends",
   "author": "Felix Franco",
   "license": "MIT",
+  "main": "dist/ngx-global-state/bundles/ngx-global-state.umd.js",
+  "types": "dist/ngx-global-state/ngx-global-state.d.ts",
+  "typings": "dist/ngx-global-state/ngx-global-state.d.ts",
+  "homepage": "https://github.com/devalfe/ngx-global-state#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/devalfe/ngx-global-state.git"
   },
-  "typings": "dist/ngx-global-state/ngx-global-state.d.ts",
+  "bugs": {
+    "email": "mdt.webmaster@gmail.com",
+    "url": "https://github.com/devalfe/ngx-global-state/issues"
+  },
   "keywords": [
     "angular",
     "micro-frontend",

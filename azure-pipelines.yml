@@ -21,12 +21,12 @@ variables:
 
 stages:
   # ──────────────────────────────────────────────────────────────────────────────
-  # 1) VALIDATE — instala, lint/format (si existen scripts), tests, docs, build lib
+  # 1) CI — instala, lint, test, build y publica dist como artefacto
   # ──────────────────────────────────────────────────────────────────────────────
-  - stage: Validate
-    displayName: 'Validate (build + test + docs)'
+  - stage: CI
+    displayName: 'CI: install + lint + test + build + artifact'
     jobs:
-      - job: validate
+      - job: build_and_test
         pool:
           vmImage: 'ubuntu-latest'
         steps:
@@ -54,11 +54,13 @@ stages:
 
           - script: HUSKY=0 npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
             displayName: 'npm ci'
+            env:
+              GITHUB_TOKEN: $(GITHUB_TOKEN)
 
           - script: |
               if npm run | grep -q "lint"; then npm run lint; else echo "No lint script"; fi
               if npm run | grep -q "format:check"; then npm run format:check; else echo "No format:check script"; fi
-            displayName: 'ESLint / Prettier (opcionales)'
+            displayName: 'ESLint / Prettier (check)'
 
           - script: |
               if npm run | grep -q "test:ci"; then npm run test:ci; else echo "No tests"; fi
@@ -81,68 +83,137 @@ stages:
             displayName: 'Publish dist artifact'
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # 2) RELEASE — semantic-release en main (publica a npm.pkg.github.com)
+  # 2) SECURITY — auditoría de dependencias y lint estricto
   # ──────────────────────────────────────────────────────────────────────────────
-  - stage: Release
-    displayName: 'Semantic Release (main only → GitHub Packages)'
-    dependsOn: Validate
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  - stage: SECURITY
+    displayName: 'Security: npm audit + strict lint'
+    dependsOn: CI
+    condition: succeeded()
     jobs:
-      - job: semantic_release
-        displayName: 'semantic-release'
-        pool:
-          vmImage: 'ubuntu-latest'
+      - job: security_checks
+        pool: { vmImage: 'ubuntu-latest' }
         steps:
           - checkout: self
-            persistCredentials: true
             fetchDepth: 0
-
           - task: NodeTool@0
-            displayName: 'Use Node $(NODE_VERSION)'
-            inputs:
-              versionSpec: '$(NODE_VERSION)'
+            inputs: { versionSpec: '$(NODE_VERSION)' }
 
-          # Escribe ~/.npmrc para GitHub Packages usando el PAT almacenado en GITHUB_TOKEN
-          - script: |
-              echo "@devalfe:registry=https://npm.pkg.github.com" > ~/.npmrc
-              echo "//npm.pkg.github.com/:_authToken=$(GITHUB_TOKEN)" >> ~/.npmrc
-              echo "always-auth=true" >> ~/.npmrc
-              echo "npmrc configured for GitHub Packages"
-            displayName: 'Configure npmrc for GitHub Packages'
-
-          - script: npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+          - script: HUSKY=0 npm ci
             displayName: 'npm ci'
-
-          - script: npm run build:lib
-            displayName: 'Build library (for semantic-release)'
-
-          # Ejecuta semantic-release y fuerza repositoryUrl desde la variable del pipeline
-          - script: |
-              export HUSKY=0
-              npx semantic-release --repositoryUrl "$(Build.Repository.Uri)"
-            displayName: 'Run semantic-release (publish to npm.pkg.github.com)'
             env:
-              # PAT con scopes read/write packages
-              NPM_TOKEN: $(GITHUB_TOKEN) # lo usa @semantic-release/npm
-              GITHUB_TOKEN: $(System.AccessToken) # para @semantic-release/git (commit+tag)
+              GITHUB_TOKEN: $(GITHUB_TOKEN)
+
+          - script: npm audit --audit-level=high
+            displayName: 'npm audit (fail on high)'
+
+          - script: |
+              if npm run | grep -q "lint"; then npm run lint; else echo "No lint script"; fi
+            displayName: 'ESLint strict'
+
+        # (Opcional) CodeQL / MS Security DevOps si usas la extensión
+        # - task: MicrosoftSecurityDevOps@1
+        #   inputs: { productSelection: 'codeql,dependency' }
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # 3) DOCS DEPLOY — Despliega Compodoc a Azure Static Web Apps
+  # 3) QA — tras aprobación del environment `qa`, publicar canary (next)
+  #     versión: X.Y.Z-next.<BuildId> (no modifica el repo; solo dist)
   # ──────────────────────────────────────────────────────────────────────────────
-  - stage: DocsDeploy
+  - stage: QA
+    displayName: 'QA: Publish canary (dist-tag: next) to GPR'
+    dependsOn: [CI, SECURITY]
+    condition: succeeded()
+    jobs:
+      - deployment: canary_publish
+        environment: qa # <-- configura approval en Environments
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  fetchDepth: 0
+                - task: NodeTool@0
+                  inputs: { versionSpec: '$(NODE_VERSION)' }
+
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    buildType: current
+                    artifactName: mf-shared-dist
+                    targetPath: '$(Pipeline.Workspace)/mf-dist'
+                  displayName: 'Download dist artifact'
+
+                - script: |
+                    set -euxo pipefail
+                    DIST="$(Pipeline.Workspace)/mf-dist"
+                    BASE=$(node -e "console.log((require('./$(LIB_DIR)/package.json').version||'0.0.0').split('-')[0])")
+                    CANARY="${BASE}-next.$(Build.BuildId)"
+                    echo "Base: $BASE -> Canary: $CANARY"
+                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version='${CANARY}'; fs.writeFileSync(p, JSON.stringify(j, null, 2)); console.log('Updated',p)"
+                    cd "${DIST}"
+                    npm publish --tag next --access=public
+                  displayName: 'Publish canary (next) to GitHub Packages'
+                  env:
+                    # Usa el token del Variable Group; .npmrc del repo exige este env
+                    GITHUB_TOKEN: $(GITHUB_TOKEN)
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # 4) RELEASE — tras aprobación de `prod` (y solo en main), semantic-release
+  #     calcula versión, publica a GPR, CHANGELOG y (si añades plugin) GitHub Release
+  # ─────────────────────────────────────────────────────────────────────────@─────
+  - stage: RELEASE
+    displayName: 'Release: semantic-release → GPR + CHANGELOG (+ GitHub Release opcional)'
+    dependsOn: [CI, SECURITY, QA]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: release_release
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  persistCredentials: true
+                  fetchDepth: 0
+                - task: NodeTool@0
+                  inputs: { versionSpec: '$(NODE_VERSION)' }
+                - task: Cache@2
+                  inputs:
+                    key: 'npm | "$(Agent.OS)" | package-lock.json'
+                    path: '$(Pipeline.Workspace)/.npm'
+                    restoreKeys: |
+                      npm | "$(Agent.OS)"
+                    displayName: 'Cache npm'
+                - script: HUSKY=0 npm ci --cache "$(Pipeline.Workspace)/.npm" --prefer-offline
+                  displayName: 'npm ci'
+                  env:
+                    GITHUB_TOKEN: $(GITHUB_TOKEN)
+
+                - script: npm run build:lib
+                  displayName: 'Build library (for semantic-release)'
+
+                - script: |
+                    export HUSKY=0
+                    npx semantic-release --repositoryUrl "$(Build.Repository.Uri)"
+                  displayName: 'Run semantic-release (publish to npm.pkg.github.com)'
+                  env:
+                    NPM_TOKEN: $(GITHUB_TOKEN)
+                    GITHUB_TOKEN: $(System.AccessToken)
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # DOCS DEPLOY — Despliega Compodoc a Azure Static Web Apps desde artefacto
+  # ──────────────────────────────────────────────────────────────────────────────
+  - stage: DOCS_DEPLOY
     displayName: 'Deploy Docs to Azure Static Web Apps'
-    dependsOn: Validate
+    dependsOn: CI
     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
     jobs:
       - job: deploy_docs
-        displayName: 'Deploy docs (Compodoc)'
-        pool:
-          vmImage: 'ubuntu-latest'
+        displayName: 'Deploy docs (from artifact)'
+        pool: { vmImage: 'ubuntu-latest' }
         steps:
           - checkout: self
             fetchDepth: 1
 
-          # 1) Descarga el artefacto 'docs' a _site (dentro del repo)
+          # 1) Descargar el artefacto "docs" a una ruta conocida dentro del repo
           - task: DownloadPipelineArtifact@2
             displayName: 'Download docs artifact'
             inputs:
@@ -150,24 +221,28 @@ stages:
               artifactName: docs
               targetPath: '$(Build.SourcesDirectory)/_site'
 
-          # 2) Debug: mostrar que exista index.html
+          # 2) Verificación y normalización de estructura
           - script: |
-              echo "Sources: $(Build.SourcesDirectory)"
-              echo "Workspace: $(Pipeline.Workspace)"
-              echo "Listing _site:"
+              set -euxo pipefail
+              echo "Listing $(Build.SourcesDirectory)/_site"
               ls -la '$(Build.SourcesDirectory)/_site' || true
-              echo "Buscar index.html:"
-              find '$(Build.SourcesDirectory)/_site' -maxdepth 2 -name index.html -print || true
-              # Falla si no hay index.html
-              test -f '$(Build.SourcesDirectory)/_site/index.html' || (echo '❌ _site/index.html no existe' && exit 1)
-            displayName: 'Debug: verify downloaded docs'
 
-          # 3) Deploy con RUTA RELATIVA (evita el prefijo /working_dir)
+              # Verifica index.html en raíz; si vino anidado, súbelo un nivel
+              if [ ! -f '$(Build.SourcesDirectory)/_site/index.html' ]; then
+                if [ -f '$(Build.SourcesDirectory)/_site/docs/index.html' ]; then
+                  mv '$(Build.SourcesDirectory)/_site/docs/'* '$(Build.SourcesDirectory)/_site/'
+                fi
+              fi
+
+              test -f '$(Build.SourcesDirectory)/_site/index.html'
+            displayName: 'Verify docs layout'
+
+          # 3) Deploy a Azure Static Web Apps (no re-build)
           - task: AzureStaticWebApp@0
             displayName: 'Deploy to Azure Static Web Apps'
             inputs:
-              app_location: '_site' # <— RELATIVA, no absoluta
-              output_location: '.' # no se usa para estático puro
-              skip_app_build: true # ya está "build" (Compodoc)
+              app_location: '_site' # relativa al directorio de trabajo
+              output_location: '.' # no aplica para contenido estático
+              skip_app_build: true
             env:
               azure_static_web_apps_api_token: $(SWA_DEPLOYMENT_TOKEN)
