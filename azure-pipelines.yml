@@ -142,27 +142,32 @@ stages:
                   displayName: 'Download dist artifact'
 
                 - script: |
-                    set -euxo pipefail
+                    set -euo pipefail
+                    IFS=$'\n\t'
 
-                    PKG="@devalfe/ngx-global-state"                             # <-- cambia si aplica
+                    PKG="@devalfe/ngx-global-state"         # <-- cambia si aplica
                     REG="https://npm.pkg.github.com"
+                    DIST="$(Pipeline.Workspace)/ngx-dist"   # <-- ajusta si tu ruta es otra
 
-                    DIST="$(Pipeline.Workspace)/ngx-dist"                           # <-- tu ruta dist
+                    # Lee versión base (X.Y.Z) desde el package.json FUENTE (no el de dist)
                     BASE=$(node -e "console.log((require('./projects/ngx-global-state/package.json').version||'0.0.0').split('-')[0])")
-                    BUILD="$(Build.BuildId)"
-                    ATTEMPT="${System.JobAttempt:-1}"
 
-                    # Genera candidato 1: X.Y.Z-next.BUILD
+                    # Vars de ADO en bash
+                    BUILD="${BUILD_BUILDID:-0}"             # de Build.BuildId
+                    ATTEMPT="${SYSTEM_JOBATTEMPT:-1}"       # de System.JobAttempt
+
+                    # Candidato 1: X.Y.Z-next.BUILD
                     CANDY="${BASE}-next.${BUILD}"
 
-                    # Función: existe versión?
-                    exists () { npm view "${PKG}@${1}" version --registry="${REG}" > /dev/null 2>&1; }
+                    exists() {
+                      npm view "${PKG}@${1}" version --registry="${REG}" > /dev/null 2>&1
+                    }
 
                     if exists "${CANDY}"; then
                       # Candidato 2: X.Y.Z-next.BUILD.ATTEMPT
                       CANDY="${BASE}-next.${BUILD}.${ATTEMPT}"
                       if exists "${CANDY}"; then
-                        # Candidato 3 (fallback): X.Y.Z-next.BUILD.ATTEMPT.<epoch>
+                        # Candidato 3: X.Y.Z-next.BUILD.ATTEMPT.<epoch>
                         TS=$(date +%s)
                         CANDY="${BASE}-next.${BUILD}.${ATTEMPT}.${TS}"
                       fi
@@ -170,15 +175,16 @@ stages:
 
                     echo "Canary version → ${CANDY}"
 
-                    # Escribe versión y (opcional) publishConfig.registry en el package.json de dist
-                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version='${CANDY}'; j.publishConfig={...(j.publishConfig||{}), registry:'${REG}'}; fs.writeFileSync(p, JSON.stringify(j,null,2)); console.log('Updated',p)"
-
-                    # Autenticación
-                    echo "@devalfe:registry=${REG}" > ~/.npmrc                   # <-- cambia @devalfe si tu scope difiere
+                    # Autenticación para GPR
+                    echo "@devalfe:registry=${REG}" > ~/.npmrc           # <-- cambia @devalfe si tu scope difiere
                     echo "//npm.pkg.github.com/:_authToken=$(GITHUB_TOKEN)" >> ~/.npmrc
                     echo "always-auth=true" >> ~/.npmrc
 
+                    # Verifica login
                     npm whoami --registry="${REG}"
+
+                    # Asegura publishConfig.registry y version en el package.json de DIST
+                    node -e "const fs=require('fs');const p='${DIST}/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version='${CANDY}'; j.publishConfig={...(j.publishConfig||{}), registry:'${REG}'}; fs.writeFileSync(p, JSON.stringify(j,null,2)); console.log('Updated',p)"
 
                     # Publica con tag 'next'
                     cd "${DIST}"
