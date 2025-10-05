@@ -137,13 +137,13 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   inputs:
                     buildType: current
-                    artifactName: mf-shared-dist
-                    targetPath: '$(Pipeline.Workspace)/mf-dist'
+                    artifactName: ngx-global-state-dist
+                    targetPath: '$(Pipeline.Workspace)/ngx-dist'
                   displayName: 'Download dist artifact'
 
                 - script: |
                     set -euxo pipefail
-                    DIST="$(Pipeline.Workspace)/mf-dist"
+                    DIST="$(Pipeline.Workspace)/ngx-dist"
                     BASE=$(node -e "console.log((require('./$(LIB_DIR)/package.json').version||'0.0.0').split('-')[0])")
                     CANARY="${BASE}-next.$(Build.BuildId)"
                     echo "Base: $BASE -> Canary: $CANARY"
@@ -237,7 +237,7 @@ stages:
               test -f '$(Build.SourcesDirectory)/_site/index.html'
             displayName: 'Verify docs layout'
 
-          # 3) Deploy a Azure Static Web Apps (no re-build)
+          # 3) Deploy an Azure Static Web Apps (no re-build)
           - task: AzureStaticWebApp@0
             displayName: 'Deploy to Azure Static Web Apps'
             inputs:
