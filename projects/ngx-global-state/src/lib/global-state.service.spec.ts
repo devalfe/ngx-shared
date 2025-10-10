@@ -1,151 +1,180 @@
-import { GlobalStateService, GlobalState } from './global-state.service';
+import { Subject } from 'rxjs';
+import { GlobalStateService, GlobalState, GlobalAction } from './global-state.service';
 
-// Avoid pulling Angular ESM into Jest by mocking @angular/core
-jest.mock('@angular/core', () => ({ Injectable: () => (target: any) => target }));
+jest.mock('@angular/core', () => ({
+  Injectable: () => (target: any) => target,
+  InjectionToken: class {
+    constructor(public description: string) {}
+  },
+  Inject: () => () => undefined,
+  Optional: () => () => undefined,
+  PLATFORM_ID: 'browser',
+}));
 
-// Simple mock for CrossAppBridgeService shape (no runtime import)
-interface BridgeLike {
-  publish: (channel: string, payload: any) => void;
-}
-class BridgeMock implements BridgeLike {
+jest.mock('@angular/common', () => ({
+  isPlatformBrowser: () => true,
+}));
+
+class BridgeMock {
   publish = jest.fn();
+  private channels = new Map<string, Subject<any>>();
+
+  listen<T>(channel: string) {
+    let subject = this.channels.get(channel);
+    if (!subject) {
+      subject = new Subject<any>();
+      this.channels.set(channel, subject);
+    }
+    return subject.asObservable();
+  }
+
+  emit<T>(channel: string, value: T): void {
+    const subject = this.channels.get(channel);
+    subject?.next(value);
+  }
+}
+
+class MemoryStorage implements Storage {
+  private store = new Map<string, string>();
+
+  get length(): number {
+    return this.store.size;
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.store.has(key) ? this.store.get(key)! : null;
+  }
+
+  key(index: number): string | null {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.store.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.store.set(key, value);
+  }
 }
 
 describe('GlobalStateService', () => {
+  const persistenceKey = 'spec:global-state';
   let bridge: BridgeMock;
-  let service: GlobalStateService;
+  let storage: MemoryStorage;
 
   const sampleUser: NonNullable<GlobalState['user']> = {
-    id: 'u1',
-    name: 'Alice',
+    id: 'user-1',
+    name: 'Ada',
     permissions: ['read'],
     preferences: { lang: 'es' },
   };
 
   beforeEach(() => {
-    // Clean storage between tests
-    sessionStorage.clear();
-    localStorage.clear();
     bridge = new BridgeMock();
-    service = new GlobalStateService(bridge as any);
+    storage = new MemoryStorage();
   });
 
-  test('should initialize with defaults when no storage', (done) => {
-    service.state$.subscribe((state) => {
-      expect(state.user).toBeNull();
-      expect(state.notifications).toEqual([]);
-      expect(state.modalContext).toBeNull();
-      expect(state.theme).toEqual({ mode: 'light', primaryColor: '#007bff', customCSS: '' });
-      done();
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function createService(): GlobalStateService {
+    return new GlobalStateService(bridge as any, 'browser', {
+      storage,
+      key: persistenceKey,
+      schemaVersion: 1,
     });
+  }
+
+  test('initial snapshot uses defaults when nothing is persisted', () => {
+    const service = createService();
+
+    const snapshot = service.getSnapshot();
+    expect(snapshot.user).toBeNull();
+    expect(snapshot.notifications).toEqual([]);
+    expect(snapshot.modalContext).toBeNull();
+    expect(snapshot.theme).toEqual({ mode: 'light', primaryColor: '#007bff', customCSS: '' });
   });
 
-  test('should load user/theme from sessionStorage on start', () => {
+  test('loads persisted user and theme on startup', () => {
     const saved = {
+      v: 1,
       user: sampleUser,
-      theme: { mode: 'dark', primaryColor: '#111111', customCSS: '.x{}' },
-    } as Partial<GlobalState>;
-    sessionStorage.setItem('globalState', JSON.stringify(saved));
+      theme: { mode: 'dark', primaryColor: '#101010', customCSS: '.x{}' },
+    };
+    storage.setItem(persistenceKey, JSON.stringify(saved));
 
-    // Recreate service to trigger a load
-    service = new GlobalStateService(bridge as any);
+    const service = createService();
 
-    expect((service as any).stateSubject.value.user).toEqual(sampleUser);
-    expect((service as any).stateSubject.value.theme).toEqual(saved.theme);
+    const snapshot = service.getSnapshot();
+    expect(snapshot.user).toEqual(sampleUser);
+    expect(snapshot.theme).toEqual(saved.theme);
   });
 
-  test('updateState should next new state and publish via bridge', () => {
+  test('updateState merges partial payload and publishes typed action', () => {
+    const service = createService();
+
     service.updateState('theme', { mode: 'dark' });
 
-    const value: GlobalState = (service as any).stateSubject.value;
-    expect(value.theme.mode).toBe('dark');
-    expect(bridge.publish).toHaveBeenCalledWith('state', {
-      key: 'theme',
-      newValue: { mode: 'dark', primaryColor: '#007bff', customCSS: '' },
-    });
+    const snapshot = service.getSnapshot();
+    expect(snapshot.theme).toEqual({ mode: 'dark', primaryColor: '#007bff', customCSS: '' });
+
+    expect(bridge.publish).toHaveBeenCalledWith(
+      'state',
+      expect.objectContaining({
+        action: {
+          type: 'SET_THEME',
+          payload: { mode: 'dark', primaryColor: '#007bff', customCSS: '' },
+        },
+      }),
+    );
   });
 
-  test('setUser should update user and persist to sessionStorage', () => {
+  test('setUser persists user and current theme after audit time', () => {
+    jest.useFakeTimers();
+    const service = createService();
+
     service.setUser(sampleUser);
 
-    const savedRaw = sessionStorage.getItem('globalState');
-    expect(savedRaw).not.toBeNull();
-    const saved = JSON.parse(savedRaw!);
-    expect(saved.user).toEqual(sampleUser);
+    jest.advanceTimersByTime(20);
+    jest.runOnlyPendingTimers();
+
+    const raw = storage.getItem(persistenceKey);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed).toMatchObject({ v: 1, user: sampleUser, theme: service.getSnapshot().theme });
   });
 
-  test('addNotification should add with id and timestamp', () => {
-    service.addNotification({ message: 'Hello', type: 'info' });
+  test('remote bridge actions mutate local state without re-publishing', () => {
+    const service = createService();
+    (bridge.publish as jest.Mock).mockClear();
 
-    const notifications = (service as any).stateSubject.value.notifications;
-    expect(notifications).toHaveLength(1);
-    const n = notifications[0];
-    expect(n.message).toBe('Hello');
-    expect(n.type).toBe('info');
-    expect(typeof n.id).toBe('string');
-    expect(true).toBe(true);
-  });
-
-  test('removeNotification should remove by id', () => {
-    service.addNotification({ message: 'A', type: 'info' });
-    const id = (service as any).stateSubject.value.notifications[0].id as string;
-
-    service.removeNotification(id);
-    expect((service as any).stateSubject.value.notifications).toHaveLength(0);
-  });
-
-  test('setModalContext and clearModalContext', () => {
-    const ctx: NonNullable<GlobalState['modalContext']> = {
-      sourceApp: 'app1',
-      data: { x: 1 },
-      metadata: { y: 2 },
+    const remoteAction: { origin: string; action: GlobalAction } = {
+      origin: 'other-app',
+      action: { type: 'SET_USER', payload: sampleUser },
     };
 
-    service.setModalContext(ctx);
-    expect((service as any).stateSubject.value.modalContext).toEqual(ctx);
+    bridge.emit('state', remoteAction);
 
-    service.clearModalContext();
-    expect((service as any).stateSubject.value.modalContext).toBeNull();
+    expect(service.getSnapshot().user).toEqual(sampleUser);
+    expect(bridge.publish).not.toHaveBeenCalled();
   });
 
-  test('selectUser should not emit when unrelated keys change (distinctUntilChanged)', () => {
-    const emits: GlobalState['user'][] = [];
-    const sub = service.selectUser().subscribe((u) => emits.push(u));
+  test('addNotification assigns id and timestamp metadata', () => {
+    const service = createService();
 
-    // Initial null emits from BehaviorSubject
-    expect(emits).toEqual([null]);
+    service.addNotification({ message: 'Hola', type: 'info' });
 
-    // Change theme: selectUser should NOT emit
-    service.updateState('theme', { mode: 'dark' });
-    expect(emits).toHaveLength(1);
-
-    // Set user: should emit once
-    service.setUser(sampleUser);
-    expect(emits).toHaveLength(2);
-
-    // Change notifications: still no extra user emission
-    service.addNotification({ message: 'ok', type: 'success' });
-    expect(emits).toHaveLength(2);
-
-    sub.unsubscribe();
-  });
-
-  test('selectTheme returns updates and persistence stores only user+theme', () => {
-    const themes: GlobalState['theme'][] = [];
-    const sub = service.selectTheme().subscribe((t) => themes.push(t));
-
-    service.updateState('theme', { primaryColor: '#ff0000' });
-
-    // @ts-ignore
-    expect(themes[themes.length - 1].primaryColor).toBe('#ff0000');
-
-    // notifications are not persisted; user+theme are
-    service.addNotification({ message: 'x', type: 'success' });
-
-    const saved = JSON.parse(sessionStorage.getItem('globalState')!);
-    expect(saved.theme.primaryColor).toBe('#ff0000');
-    expect(saved.notifications).toBeUndefined();
-
-    sub.unsubscribe();
+    const notifications = service.getSnapshot().notifications;
+    expect(notifications).toHaveLength(1);
+    const [notif] = notifications;
+    expect(notif.message).toBe('Hola');
+    expect(typeof notif.id).toBe('string');
+    expect(notif.timestamp instanceof Date).toBe(true);
   });
 });

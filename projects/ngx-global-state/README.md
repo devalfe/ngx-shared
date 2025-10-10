@@ -10,34 +10,73 @@ npm install @devalfe/ngx-global-state --save
 
 ## 🚀 Uso rápido
 
+Inicializa con el nuevo esquema de providers (recomendado):
+
 ```ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
-import { provideGlobalState, provideMessageBus } from '@devalfe/ngx-global-state';
+import {
+  provideGlobalStatePersistence,
+  provideBridge,
+  provideMessageBus,
+} from '@devalfe/ngx-global-state';
 
 bootstrapApplication(AppComponent, {
   providers: [
-    ...provideGlobalState({ appId: 'shell', persistence: 'session', crossApp: 'none' }),
-    ...provideMessageBus({ appId: 'shell' }),
+    ...provideGlobalStatePersistence({
+      storage: typeof window !== 'undefined' ? sessionStorage : null,
+      key: 'ngx:globalState:v1',
+      schemaVersion: 1,
+    }),
+    ...provideBridge({
+      transport: 'broadcastChannel', // 'broadcastChannel' | 'storage' | 'none'
+      namespace: 'ngxShared',
+      protocolVersion: 1,
+    }),
+    ...provideMessageBus({ appId: 'shell', defaultTimeoutMs: 8000 }),
+  ],
+});
+```
+
+Compatibilidad: aún puedes usar los helpers legacy (deprecated) durante la migración:
+
+```ts
+import { provideGlobalState, provideMessageBusLegacy } from '@devalfe/ngx-global-state';
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    ...provideGlobalState({
+      appId: 'shell',
+      persistence: 'session',
+      crossApp: 'broadcast-channel',
+      channelPrefix: 'ngxShared',
+    }),
+    ...provideMessageBusLegacy({ appId: 'shell' }),
   ],
 });
 ```
 
 ## 📚 API (resumen)
 
-- **GlobalStateService**
-  - `setUser(user)` / `selectUser()`
-  - `addNotification(n)` / `removeNotification(id)` / `selectNotifications()`
-  - `setModalContext(ctx)` / `clearModalContext()`
-  - `selectTheme()` / `updateState('theme', ...)`
-- **MessageBusService**
-  - `send(target, type, payload)`
-  - `broadcast(type, payload)`
-  - `sendWithResponse(target, type, payload)`
-  - `onMessage(type)` / `respond(original, resp)`
-- **Providers**
-  - `provideGlobalState(options)`
-  - `provideMessageBus(options)`
+- GlobalStateService
+  - setUser(user) / clearUser() / getSnapshot()
+  - addNotification(n) / removeNotification(id) / selectNotifications() / selectNotificationCount()
+  - setModalContext(ctx) / clearModalContext()
+  - selectUser() / selectUserPermissions()
+  - selectTheme() / setTheme(theme) / toggleThemeMode() / updateState('theme', ...)
+  - resetState()
+- MessageBusService
+  - send(target, type, payload)
+  - broadcast(type, payload)
+  - sendWithResponse(target, type, payload, timeoutMs?)
+  - on(type) / onMessage(type) / respond(original, resp)
+- Providers (nuevo esquema)
+  - provideGlobalStatePersistence(config)
+  - provideBridge(config)
+  - provideMessageBus(config)
+- Compatibilidad (deprecated)
+  - provideGlobalState(options)
+  - provideMessageBusLegacy(options)
 
 ## 🧪 Tests (Jest)
 

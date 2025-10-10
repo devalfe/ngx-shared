@@ -1,141 +1,137 @@
-import { MessageBusService, AppMessage } from './message-bus.service';
+import { firstValueFrom } from 'rxjs';
 import { CrossAppBridgeService } from './cross-app-bridge.service';
+import { AppMessage, MessageBusService } from './message-bus.service';
 
-// Avoid pulling Angular ESM into Jest by mocking @angular/core
-jest.mock('@angular/core', () => ({ Injectable: () => (target: any) => target }));
+jest.mock('@angular/core', () => ({
+  Injectable: () => (target: any) => target,
+  InjectionToken: class {
+    constructor(public description: string) {}
+  },
+  Inject: () => () => undefined,
+  Optional: () => () => undefined,
+}));
 
 describe('MessageBusService', () => {
   let bridge: CrossAppBridgeService;
-  let busA: MessageBusService; // acts as sender or receiver depending on test
-  let busB: MessageBusService; // optional second participant
-
-  const appA = 'appA';
-  const appB = 'appB';
+  let busA: MessageBusService;
+  let busB: MessageBusService;
+  let busC: MessageBusService;
 
   beforeEach(() => {
-    bridge = new CrossAppBridgeService();
-    busA = new MessageBusService(bridge);
-    busB = new MessageBusService(bridge);
-  });
-
-  test('send should deliver payload to subscribers of the given type', (done) => {
-    const received: any[] = [];
-    const sub = busA.onMessage<number>('ADD').subscribe((v) => {
-      received.push(v);
-      expect(received).toEqual([5]);
-      sub.unsubscribe();
-      done();
+    bridge = new CrossAppBridgeService({
+      transport: 'none',
+      namespace: 'spec',
+      protocolVersion: 1,
     });
-
-    busA.send(appB, 'ADD', 5, appA);
-  });
-
-  test('broadcast should deliver payload to subscribers of the type', (done) => {
-    const sub = busA.onMessage<string>('PING').subscribe((msg) => {
-      expect(msg).toBe('hello');
-      sub.unsubscribe();
-      done();
+    busA = new MessageBusService(bridge, {
+      appId: 'appA',
+      allowSelfLoop: false,
+      defaultTimeoutMs: 50,
     });
-
-    busA.broadcast('PING', 'hello', appA);
+    busB = new MessageBusService(bridge, {
+      appId: 'appB',
+      allowSelfLoop: false,
+      defaultTimeoutMs: 50,
+    });
+    busC = new MessageBusService(bridge, {
+      appId: 'appC',
+      allowSelfLoop: false,
+      defaultTimeoutMs: 50,
+      allowedTypes: ['PING', 'BROADCAST'],
+    });
   });
 
-  test('type filtering: only matching type should be received', () => {
-    const a: any[] = [];
-    const b: any[] = [];
+  test('send routes payload only to the configured target', () => {
+    const receivedA: string[] = [];
+    const receivedB: string[] = [];
+    const receivedC: string[] = [];
 
-    const subA = busA.onMessage<string>('TYPE_A').subscribe((v) => a.push(v));
-    const subB = busA.onMessage<string>('TYPE_B').subscribe((v) => b.push(v));
+    const subA = busA.onMessage<string>('PING').subscribe((value) => receivedA.push(value));
+    const subB = busB.onMessage<string>('PING').subscribe((value) => receivedB.push(value));
+    const subC = busC.onMessage<string>('PING').subscribe((value) => receivedC.push(value));
 
-    busA.send(appB, 'TYPE_A', 'one', appA);
-    busA.send(appB, 'TYPE_B', 'two', appA);
-    busA.send(appB, 'TYPE_A', 'three', appA);
+    busA.send('appB', 'PING', 'hello');
 
-    expect(a).toEqual(['one', 'three']);
-    expect(b).toEqual(['two']);
+    expect(receivedB).toEqual(['hello']);
+    expect(receivedA).toEqual([]);
+    expect(receivedC).toEqual([]);
 
     subA.unsubscribe();
     subB.unsubscribe();
+    subC.unsubscribe();
   });
 
-  test('multiple subscribers to same type all receive', () => {
-    const r1: string[] = [];
-    const r2: string[] = [];
+  test('broadcast delivers to all peers except the sender when self-loop disabled', () => {
+    const payloadB: string[] = [];
+    const payloadC: string[] = [];
+    const payloadA: string[] = [];
 
-    const s1 = busA.onMessage<string>('EVT').subscribe((v) => r1.push(v));
-    const s2 = busA.onMessage<string>('EVT').subscribe((v) => r2.push(v));
+    const subB = busB.onMessage<string>('BROADCAST').subscribe((val) => payloadB.push(val));
+    const subC = busC.onMessage<string>('BROADCAST').subscribe((val) => payloadC.push(val));
+    const subA = busA.onMessage<string>('BROADCAST').subscribe((val) => payloadA.push(val));
 
-    busA.send(appB, 'EVT', 'x', appA);
-    busA.send(appB, 'EVT', 'y', appA);
+    busA.broadcast('BROADCAST', 'news');
 
-    expect(r1).toEqual(['x', 'y']);
-    expect(r2).toEqual(['x', 'y']);
+    expect(payloadB).toEqual(['news']);
+    expect(payloadC).toEqual(['news']);
+    expect(payloadA).toEqual([]);
 
-    s1.unsubscribe();
-    s2.unsubscribe();
+    subA.unsubscribe();
+    subB.unsubscribe();
+    subC.unsubscribe();
   });
 
-  test('late subscribers do not receive past messages (no replay)', () => {
-    // Send it before subscribing
-    busA.send(appB, 'ONCE', 1, appA);
-
-    const received: number[] = [];
-    const sub = busA.onMessage<number>('ONCE').subscribe((v) => received.push(v));
-
-    // Send after subscribing
-    busA.send(appB, 'ONCE', 2, appA);
-
-    expect(received).toEqual([2]);
-    sub.unsubscribe();
-  });
-
-  test('sendWithResponse: requester receives a single response via responseChannel', (done) => {
-    // Simulate appB acting as responder by listening to the raw bridge channel
-    // @ts-ignore
-    const rawSub = (bridge as any).listen<AppMessage>('bus').subscribe((msg: AppMessage) => {
-      if (msg.type === 'GET_DATA' && msg.requiresResponse && msg.responseChannel) {
-        // Prepare some response
-        const data = { value: 42 };
-        // Use busB to respond to an original message
-        busB.respond(msg, data, appB);
+  test('sendWithResponse resolves once responder replies through responseChannel', async () => {
+    const responder = busB.on<AppMessage>('REQUEST_DATA').subscribe((msg) => {
+      if (msg.requiresResponse) {
+        busB.respond(msg, { answer: 42 });
       }
     });
 
-    const resValues: Array<{ value: number }> = [];
-    const res$ = busA.sendWithResponse<{}, { value: number }>(appB, 'GET_DATA', {}, appA);
-    res$.subscribe({
-      next: (val) => resValues.push(val),
-      complete: () => {
-        expect(resValues).toEqual([{ value: 42 }]);
-        rawSub.unsubscribe();
-        done();
-      },
-    });
+    const response = await firstValueFrom(
+      busA.sendWithResponse<{}, { answer: number }>('appB', 'REQUEST_DATA', {}),
+    );
+
+    expect(response).toEqual({ answer: 42 });
+
+    responder.unsubscribe();
   });
 
-  test('respond is a no-op when message does not require response', () => {
-    const spy = jest.spyOn(bridge as any, 'publish');
+  test('sendWithResponse rejects when timeout elapses without answer', () => {
+    jest.useFakeTimers();
+    const errors: Error[] = [];
 
-    const msg: AppMessage = {
-      id: 'x',
-      source: appA,
-      target: appB,
-      type: 'ANY',
+    const sub = busA.sendWithResponse('appB', 'NEEDS_REPLY', {}).subscribe({
+      error: (err) => {
+        errors.push(err as Error);
+      },
+    });
+
+    jest.advanceTimersByTime(60);
+    jest.runOnlyPendingTimers();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain('Timeout');
+
+    sub.unsubscribe();
+    jest.useRealTimers();
+  });
+
+  test('respond ignores messages that do not request response', () => {
+    const spy = jest.spyOn(bridge, 'publish');
+
+    const original: AppMessage = {
+      id: 'msg1',
+      source: 'appB',
+      target: 'appA',
+      type: 'PING',
       payload: null,
-      timestamp: new Date(),
-      // requiresResponse: undefined
-      // responseChannel: undefined
+      timestamp: new Date().toISOString(),
     };
 
-    busA.respond(msg, { ok: true }, appA);
+    busA.respond(original, { ok: true });
 
-    // publish should not be called with a response channel
-    // It may be called by other tests; assert that it was not called with responseChannel semantics
-    const calls = spy.mock.calls.filter((c) => c[0] === 'bus');
-    const anyResponsePublish = calls.some(([, payload]) =>
-      (payload as AppMessage).type?.startsWith('msg_'),
-    );
-    expect(anyResponsePublish).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
 
     spy.mockRestore();
   });

@@ -1,13 +1,27 @@
 import { CrossAppBridgeService } from './cross-app-bridge.service';
 
-// Avoid pulling Angular ESM into Jest by mocking @angular/core
-jest.mock('@angular/core', () => ({ Injectable: () => (target: any) => target }));
+jest.mock('@angular/core', () => ({
+  Injectable: () => (target: any) => target,
+  InjectionToken: class {
+    constructor(public description: string) {}
+  },
+  Inject: () => () => undefined,
+  Optional: () => () => undefined,
+}));
 
 describe('CrossAppBridgeService', () => {
   let service: CrossAppBridgeService;
 
   beforeEach(() => {
-    service = new CrossAppBridgeService();
+    service = new CrossAppBridgeService({
+      transport: 'none',
+      namespace: 'spec',
+      protocolVersion: 1,
+    });
+  });
+
+  afterEach(() => {
+    service.destroy();
   });
 
   test('listen should receive messages published on the same channel', () => {
@@ -41,11 +55,9 @@ describe('CrossAppBridgeService', () => {
 
   test('publishing to a channel with no listeners should not throw', () => {
     expect(() => service.publish('no-listeners', 123)).not.toThrow();
-    // Later subscriptions should only receive future messages
     const received: number[] = [];
     const sub = service.listen<number>('no-listeners').subscribe((v) => received.push(v));
 
-    // The first publication happened before subscription; Subject has no replay
     expect(received).toEqual([]);
 
     service.publish('no-listeners', 456);
@@ -82,7 +94,6 @@ describe('CrossAppBridgeService', () => {
 
     const subLate = service.listen('topic2').subscribe((m) => late.push(m));
 
-    // After a late subscription, only future messages are received by late
     service.publish('topic2', 3);
     service.publish('topic2', 4);
 
