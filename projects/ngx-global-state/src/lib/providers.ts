@@ -1,5 +1,5 @@
 import { EnvironmentProviders, makeEnvironmentProviders, Provider } from '@angular/core';
-import { CrossAppBridgeService } from '@devalfe/ngx-global-state';
+import { CrossAppBridgeService } from './cross-app-bridge.service';
 import { GlobalStateService } from './global-state.service';
 import {
   GLOBAL_STATE_OPTIONS,
