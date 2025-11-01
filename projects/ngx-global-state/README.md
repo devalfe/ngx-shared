@@ -8,17 +8,54 @@ Librería Angular para **estado global distribuido** y **bus de mensajes** entre
 npm install @devalfe/ngx-global-state --save
 ```
 
-## 🚀 Uso rápido
+## 🚀 Configuración Automática con Schematics (Recomendado)
+
+Esta librería incluye schematics para automatizar su configuración en proyectos Angular.
+
+### `ng add` (Instalación Rápida)
+
+La forma más sencilla de empezar es usando `ng add`. Este comando instalará el paquete y configurará automáticamente los `providers` necesarios en tu aplicación con valores por defecto.
+
+```bash
+ng add @devalfe/ngx-global-state
+```
+
+Durante la instalación, te pedirá interactivamente el `appId` para tu aplicación.
+
+### `ng generate` (Configuración Avanzada)
+
+Si necesitas un control más detallado sobre la configuración, puedes usar el schematic `init` con `ng generate`.
+
+```bash
+ng generate @devalfe/ngx-global-state:init [opciones]
+```
+
+**Opciones Disponibles:**
+
+- `--appId` (string): El ID único de la aplicación para el `MessageBusService`.
+- `--persistence` (boolean): Habilita la persistencia del estado en `sessionStorage`. (Default: `true`)
+- `--crossApp` (enum: `broadcast-channel` | `storage` | `none`): Define el modo de comunicación entre aplicaciones. (Default: `broadcast-channel`)
+- `--channelPrefix` (string): Prefijo para los canales de comunicación. (Default: `ngx-gs`)
+
+**Ejemplo de uso avanzado:**
+
+```bash
+ng generate @devalfe/ngx-global-state:init --appId="mi-app-principal" --crossApp="storage"
+```
+
+## ⚙️ Configuración Manual
+
+Si prefieres no usar schematics, puedes configurar los providers manualmente en tu `app.config.ts` (o `main.ts`).
 
 ```ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
-import { provideGlobalState, provideMessageBus } from '@devalfe/mf-shared';
+import { provideGlobalState, provideMessageBus } from '@devalfe/ngx-global-state';
 
 bootstrapApplication(AppComponent, {
   providers: [
-    ...provideGlobalState({ appId: 'shell', persistence: 'session', crossApp: 'none' }),
-    ...provideMessageBus({ appId: 'shell' }),
+    provideGlobalState({ persistence: true, crossApp: 'broadcast-channel' }),
+    provideMessageBus({ appId: 'shell' }),
   ],
 });
 ```
