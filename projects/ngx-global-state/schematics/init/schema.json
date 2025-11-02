@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "id": "InitSchematicSchema",
+  "title": "ngx-global-state init schematic",
+  "type": "object",
+  "properties": {
+    "appId": {
+      "type": "string",
+      "description": "El ID único de la aplicación para el MessageBusService.",
+      "x-prompt": "Por favor, introduce el ID único para esta aplicación (appId):"
+    },
+    "persistence": {
+      "type": "boolean",
+      "description": "Habilita la persistencia del estado en sessionStorage.",
+      "default": true
+    },
+    "crossApp": {
+      "type": "string",
+      "description": "Define el modo de comunicación entre aplicaciones.",
+      "enum": ["broadcast-channel", "storage", "none"],
+      "default": "broadcast-channel"
+    },
+    "channelPrefix": {
+      "type": "string",
+      "description": "Prefijo para los canales de comunicación (BroadcastChannel o Storage).",
+      "default": "ngx-gs"
+    }
+  },
+  "required": []
+}

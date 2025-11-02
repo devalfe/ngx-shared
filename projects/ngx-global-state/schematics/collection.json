@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../node_modules/@angular-devkit/schematics/collection-schema.json",
+  "schematics": {
+    "ng-add": {
+      "description": "Agrega e inicializa @devalfe/ngx-global-state en la aplicación.",
+      "factory": "./ng-add/index#ngAdd",
+      "schema": "./ng-add/schema.json"
+    },
+    "init": {
+      "description": "Configura los providers para @devalfe/ngx-global-state.",
+      "factory": "./init/index#init",
+      "schema": "./init/schema.json"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "id": "NgAddSchematicSchema",
+  "title": "ngx-global-state ng-add schematic",
+  "type": "object",
+  "properties": {
+    "appId": {
+      "type": "string",
+      "description": "El ID único de la aplicación para el MessageBusService.",
+      "x-prompt": "Por favor, introduce el ID único para esta aplicación (appId):"
+    }
+  },
+  "required": []
+}
