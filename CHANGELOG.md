@@ -1,3 +1,18 @@
+## 1.1.0 (2025-11-02)
+
+* Merge pull request #6 from devalfe/feature/schematics ([873989f](https://github.com/devalfe/ngx-shared/commit/873989f)), closes [#6](https://github.com/devalfe/ngx-shared/issues/6)
+* fix: update import path for CrossAppBridgeService in providers.ts ([06e0fd0](https://github.com/devalfe/ngx-shared/commit/06e0fd0))
+* feat(schematics): add initialization schematics for ngx-global-state ([9d7e6ef](https://github.com/devalfe/ngx-shared/commit/9d7e6ef))
+* ci(pipeline): add GitHub Packages authentication and ensure registry config for canary release ([f9e55ae](https://github.com/devalfe/ngx-shared/commit/f9e55ae))
+* ci(pipeline): configure npm registry for GitHub Packages in canary release stage ([753d6c1](https://github.com/devalfe/ngx-shared/commit/753d6c1))
+* ci(pipeline): enhance canary versioning and streamline publish script ([2f888b2](https://github.com/devalfe/ngx-shared/commit/2f888b2))
+* ci(pipeline): generate unique canary versions for GitHub Packages and optimize publish script ([69ae255](https://github.com/devalfe/ngx-shared/commit/69ae255))
+* ci(pipeline): refine artifact download, verification, and Azure Static Web Apps deployment ([e8e7b9f](https://github.com/devalfe/ngx-shared/commit/e8e7b9f))
+* ci(pipeline): restructure stages and add security and QA checks ([3a981b8](https://github.com/devalfe/ngx-shared/commit/3a981b8))
+* ci(pipeline): update artifact download and Azure Static Web Apps deployment ([d60193f](https://github.com/devalfe/ngx-shared/commit/d60193f))
+* ci(pipeline): update artifact naming and adjust Azure deployment comment ([2dfd846](https://github.com/devalfe/ngx-shared/commit/2dfd846))
+* chore: add `.gitattributes` for consistent line endings and update lint-staged to format HTML files ([378b7d5](https://github.com/devalfe/ngx-shared/commit/378b7d5))
+
 ## 1.0.0 (2025-10-04)
 
 - chore: initial commit from @angular/cli ([081129c](https://github.com/devalfe/ngx-shared/commit/081129c))
